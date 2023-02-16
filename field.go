@@ -10,11 +10,12 @@ import (
 //An N-Field with Montgomery multiplication
 type Field struct {
 	N     *big.Int //the prime/order
-	R     *big.Int
-	N1    *big.Int
-	R1    *big.Int
+	R     *big.Int //The 2^N envelope
+	N1    *big.Int // N*N1 mod R = -1
+	R1    *big.Int // R*R1 mod N = 1 ; R*R1 - N*N1 = 1
 	L     uint     // len of N in bits
 	rmask *big.Int // Just precomputed R-1
+	R2    *big.Int // Precomputed R*R
 }
 
 //Initialize a new N-field. N is not checked for being a prime, only for its GCD with its 2^L envelope to be 1
@@ -49,10 +50,13 @@ func NewField(prime *big.Int) (*Field, error) {
 	if bezout.Cmp(big.NewInt(1)) != 0 {
 		return nil, fmt.Errorf("Bezou not satisfied: %v", bezout)
 	}
-	return &Field{prime, R, N1, R1, uint(L), new(big.Int).Sub(R, big.NewInt(1))}, nil
+	R2 := big.NewInt(0).Mul(R, R)
+	R2.Mod(R2, prime)
+	return &Field{prime, R, N1, R1, uint(L), new(big.Int).Sub(R, big.NewInt(1)), R2}, nil
 
 }
 
+//REDC Algorithm
 func (f *Field) REDC(T *big.Int) *big.Int {
 	//TmR := new(big.Int).Mod(T, f.R)
 	TmR := new(big.Int).And(T, f.rmask)
@@ -64,8 +68,10 @@ func (f *Field) REDC(T *big.Int) *big.Int {
 	t.Rsh(t, f.L)
 	if t.Cmp(f.N) >= 0 {
 		return t.Sub(t, f.N)
+	} else {
+		return t.Add(t, big.NewInt(0))
 	}
-	return t
+
 }
 
 func (a *Element) Mont() {
@@ -154,10 +160,37 @@ func (e1 *Element) Clone() *Element {
 	return e2
 }
 
+func (e1 *Element) Cmp(e2 *Element) int {
+	ne := e2.Clone()
+	if e1.isMont != e2.isMont {
+
+		if e1.isMont {
+			ne.Mont()
+		} else {
+			ne.Demont()
+		}
+
+	}
+	return e1.i.Cmp(ne.i)
+}
+
 func (f *Field) RandomElement(r io.Reader) *Element {
 	buf := make([]byte, len(f.R.Bytes()))
 	r.Read(buf)
 	i := new(big.Int)
 	i.SetBytes(buf)
 	return f.NewElement(i)
+}
+
+func (e1 *Element) Inverse() *Element {
+	e1.Demont()
+	e1.i.ModInverse(e1.i, e1.f.N)
+	return e1
+}
+
+func (e1 *Element) Neg() *Element {
+	e1.Demont()
+	e1.i.Neg(e1.i)
+	e1.i.Mod(e1.i, e1.f.N)
+	return e1
 }

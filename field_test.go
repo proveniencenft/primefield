@@ -11,7 +11,7 @@ func TestNewField(t *testing.T) {
 
 	size := 1023
 	stn := big.NewInt(int64(size))
-	//stn.SetString("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16)
+	stn.SetString("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16)
 	//stn.SetString("265252859812191058636308479999999", 10)
 	f, err := NewField(stn)
 	if err != nil {
@@ -66,5 +66,41 @@ func TestNewField(t *testing.T) {
 			t.Errorf("Bad element %v", re.Value())
 		}
 	}
+
+}
+
+func TestMon(t *testing.T) {
+	stn := big.NewInt(7829)
+	stn.SetString("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16)
+	f, err := NewField(stn)
+	if err != nil {
+		t.Error(err)
+	}
+	for i := 3; i > 0; i-- {
+		aPlain := big.NewInt(0)
+		buf := make([]byte, len(f.R.Bytes()))
+		rand.Read(buf)
+		aPlain.SetBytes(buf)
+		aPlain.Mod(aPlain, f.N)
+
+		aMod1 := big.NewInt(1).Set(aPlain)
+		aMod1.Mul(aMod1, f.R)
+		aMod1.Mod(aMod1, f.N)
+
+		aMod2 := big.NewInt(1).Set(aPlain)
+		aMod2.Mul(aMod2, f.R2)
+
+		x := f.REDC(aMod2)
+		if x.Cmp(aMod1) != 0 {
+			t.Error("Montgomery by REDC failed")
+		}
+
+		if f.REDC(x).Cmp(aPlain) != 0 {
+			t.Error("De-Montgomery by REDC failed")
+		}
+
+	}
+
+	fmt.Println("Mont by REDC ok")
 
 }
